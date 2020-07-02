@@ -7,6 +7,7 @@ Hyperoptimization.
 from datetime import datetime
 
 from pandas import DataFrame
+import pandas as pd
 import numpy as np
 
 from freqtrade.optimize.hyperopt import IHyperOptLoss
@@ -28,19 +29,21 @@ class SharpeHyperOptLoss(IHyperOptLoss):
 
         Uses Sharpe Ratio calculation.
         """
-        total_profit = results["profit_percent"]
-        days_period = (max_date - min_date).days
-
         # adding slippage of 0.1% per trade
-        total_profit = total_profit - 0.0005
-        expected_returns_mean = total_profit.sum() / days_period
-        up_stdev = np.std(total_profit)
+        results["profit_percent"] = results["profit_percent"] - 0.001
+        results["close_time_h"] = pd.to_datetime(results["close_time"], unit="s")
+        results = results.set_index("close_time_h")
+        results = results.resample("D").sum()
 
-        if up_stdev != 0:
-            sharp_ratio = expected_returns_mean / up_stdev * np.sqrt(365)
+        total_profit_per_day = results.profit_percent
+        days_period = (max_date - min_date).days
+        
+        average_daily_return = total_profit_per_day.sum() / days_period
+
+        if (np.std(total_profit_per_day ) != 0.):
+            sharpe_ratio = (average_daily_return / np.std(total_profit_per_day )) * np.sqrt(365)
         else:
             # Define high (negative) sharpe ratio to be clear that this is NOT optimal.
-            sharp_ratio = -20.
+            sharpe_ratio = -20.
 
-        # print(expected_returns_mean, up_stdev, sharp_ratio)
-        return -sharp_ratio
+        return -sharpe_ratio
